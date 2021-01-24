@@ -1,4 +1,4 @@
-import { queue } from '@xutl/queue';
+import { queue, merge } from '@xutl/queue';
 
 export interface EventEmit<DataType> {
 	(name: string, data: DataType, target?: any): Promise<void>;
@@ -43,7 +43,10 @@ export class EventEmitter {
 		if (!handlers.size) this.#handlers.delete(name);
 		return this;
 	}
-	collect<EventType, SourceType = EventEmitter>(name: string, ...more: string[]): AsyncIterable<EventIteratorValue<EventType, SourceType>> {
+	collect<EventType, SourceType = EventEmitter>(
+		name: string,
+		...more: string[]
+	): AsyncIterable<EventIteratorValue<EventType, SourceType>> {
 		const streams = [name, ...more].map((name: string) => {
 			let iter = queue<EventIteratorValue<EventType, SourceType>>();
 			const handler: EventManaged<EventType> = function (this: EventEmitter, data: EventType, target: SourceType) {
@@ -65,7 +68,7 @@ export class EventEmitter {
 				return streams[0] as AsyncIterableIterator<EventIteratorValue<EventType, SourceType>>;
 			}
 			default: {
-				return merge<EventIteratorValue<EventType, SourceType>>(...streams);
+				return merge<EventIteratorValue<EventType, SourceType>>(streams);
 			}
 		}
 	}
@@ -90,17 +93,3 @@ export class EventEmitter {
 }
 
 export default EventEmitter;
-
-function merge<T>(...items: AsyncIterable<T>[]): AsyncIterableIterator<T> {
-	const iter = queue<T>();
-	const strains: Promise<void>[] = items.map((item) => drain(item, (value: T) => iter.push(value)));
-	Promise.all(strains).then(
-		() => iter.done(),
-		(err: Error) => iter.error(err),
-	);
-	return iter;
-}
-
-async function drain<T>(source: AsyncIterable<T>, handler: (value: T) => void) {
-	for await (const item of source) handler(item);
-}
